@@ -1,0 +1,9 @@
+.venv/
+venv/
+whisper-env/
+__pycache__/
+*.pyc
+.DS_Store
+*.mp3
+*.m4a
+models/*.bin
