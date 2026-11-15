@@ -80,6 +80,27 @@ pip install -r requirements.txt
 
 Alla prima esecuzione di `live.py` macOS chiede il permesso per l'app che usi (Terminale, iTerm, VS Code). Se la richiesta non compare, abilitalo a mano in Impostazioni di Sistema → Privacy e sicurezza → Microfono.
 
+## Uso
+
+Ogni volta che apri un nuovo terminale, entra nella cartella del progetto e attiva il venv prima di lanciare gli script:
+
+```bash
+cd whisper-test
+source .venv/bin/activate      # Windows: .venv\Scripts\activate
+
+python test_file.py            # test su file audio
+python live.py                 # trascrizione live dal microfono
+python real.py                 # trascrizione realtime con frasi pulite
+```
+
+Senza attivare il venv, `python3` usa l'interprete di sistema e fallisce con `ModuleNotFoundError: No module named 'whisper'`. In alternativa puoi lanciare gli script direttamente con l'interprete del venv:
+
+```bash
+.venv/bin/python real.py
+```
+
+Se usi un IDE (VS Code, PyCharm), seleziona `.venv/bin/python` come interprete del progetto. Per uscire dal venv: `deactivate`.
+
 ## 1. Test su file audio
 
 Il repository include `testVoice.mp3`, una breve registrazione in italiano, quindi puoi provare subito senza preparare nulla. Gli altri file audio non sono inclusi (`*.mp3` è nel `.gitignore`, con l'eccezione di `testVoice.mp3`).
@@ -251,6 +272,7 @@ with subprocess.Popen(cmd, stdout=subprocess.PIPE, text=True) as proc:
 | Sintomo | Causa probabile | Azione |
 |---|---|---|
 | `externally-managed-environment` | pip su Python Homebrew | usare un venv |
+| `ModuleNotFoundError: No module named 'whisper'` | venv non attivo | `source .venv/bin/activate` (vedi Uso) |
 | `FileNotFoundError` su ffmpeg | ffmpeg mancante | installare ffmpeg |
 | errore `numba` / `llvmlite` | Python troppo recente | usare Python 3.12 |
 | `can't open file '.../live.py'` | comando lanciato dalla cartella sbagliata | `cd` nella cartella del progetto |
