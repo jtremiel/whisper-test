@@ -12,6 +12,9 @@ stt:
   model: auto
   # Precisione di calcolo. auto = float16 su GPU, int8 su CPU.
   compute_type: auto
+  # Filtro voce: scarta il rumore di fondo prima della trascrizione. Senza, turbo può
+  # inventare frasi come "Grazie a tutti." quando non parli. Costa circa 0,04 s.
+  vad_filter: true
 
 # Trigger: per ciascuno indica ESATTAMENTE uno tra `hotkey` e `mouse_button`.
 # Valori provvisori, da fissare con lo spike T04.

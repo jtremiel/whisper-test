@@ -47,7 +47,7 @@ Testo di riferimento: "Registrazione di test, prova, questa è la mia voce, test
 
 - **Default `stt.model: small`, `compute_type: int8`**. Su 3 s di audio impiega 1,1-1,2 s, dentro l'obiettivo di 1,5 s del PRD §4, con qualità buona. `turbo` su CPU impiega circa 5 s ed è fuori obiettivo; `base` è veloce ma sbaglia troppo per la dettatura.
 - **`beam_size=1`** nel Transcriber: circa 0,1-0,2 s in meno, nessuna differenza di testo in queste prove.
-- **`vad_filter` disattivato** per i comandi: con trigger premi-e-parla non porta vantaggi e non cambia il testo. Il silenzio si scarta già nel Recorder (`silence_rms`) e con `no_speech_prob`.
+- ~~**`vad_filter` disattivato**~~ **Superata (2026-11-15)**: in T09 è emerso che con turbo `no_speech_prob` vale 0,0 anche sul silenzio, quindi il rumore sopra `silence_rms` produce "Grazie a tutti.". Decisione dell'utente: nuovo campo `stt.vad_filter`, default `true` (costo ~0,04 s sul parlato).
 - **`hotwords`**: il Transcriber lo accetta (il contratto lo prevede), ma il Controller per ora **non** lo passa: in questa prova ha peggiorato il testo. Da rivalutare in T24 con frasi di comando vere.
 - `no_speech_prob`: il Transcriber può scartare i segmenti con valore alto (per esempio > 0,6) come "nessun parlato"; la soglia va tarata in T24, qui il parlato non supera 0,04.
 - `turbo` resta selezionabile da YAML per chi accetta più latenza in cambio di qualità.

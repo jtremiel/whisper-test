@@ -31,7 +31,7 @@ dev = ["pytest", "pytest-qt"]
 include = ["voicecmd*"]
 
 [tool.setuptools.package-data]
-voicecmd = ["default_config.yaml", "ui/assets/*"]
+voicecmd = ["default_config.yaml", "ui/assets/**/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

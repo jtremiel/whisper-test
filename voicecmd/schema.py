@@ -19,6 +19,9 @@ class SttConfig(_Strict):
     device: Literal["auto", "cpu", "mps"] = "auto"
     model: str = "auto"
     compute_type: str = "auto"
+    # Filtro voce (VAD) di faster-whisper. Acceso: con turbo no_speech_prob vale 0 anche sul
+    # silenzio e il rumore produce frasi inventate ("Grazie a tutti."). Costo ~0,04 s.
+    vad_filter: bool = True
 
 
 class TriggerConfig(_Strict):

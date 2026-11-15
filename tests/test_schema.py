@@ -137,3 +137,7 @@ def test_stt_defaults_are_auto():
 def test_stt_device_rejects_unknown():
     with pytest.raises(ValidationError):
         Config.model_validate({"stt": {"device": "cuda"}})
+
+
+def test_stt_vad_filter_default_on():
+    assert Config().stt.vad_filter is True
