@@ -5,5 +5,9 @@ __pycache__/
 *.pyc
 .DS_Store
 *.mp3
+!testVoice.mp3
 *.m4a
 models/*.bin
+23355652+jtremiel@users.noreply.github.md
+*.egg-info/
+.pytest_cache/

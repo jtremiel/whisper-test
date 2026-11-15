@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "voicecmd"
+version = "0.1.0"
+description = "Comandi vocali locali con Whisper, nella menu bar / system tray"
+requires-python = ">=3.11"
+dependencies = [
+    "numpy",
+    "sounddevice",
+    "faster-whisper",
+    "rapidfuzz",
+    "pydantic",
+    "PyYAML",
+    "platformdirs",
+    "pynput",
+    "PySide6",
+    "pyperclip",
+    "pyobjc-framework-Quartz; sys_platform == 'darwin'",
+    "pyobjc-framework-Cocoa; sys_platform == 'darwin'",
+    "pyobjc-framework-AVFoundation; sys_platform == 'darwin'",
+    "pyobjc-framework-ApplicationServices; sys_platform == 'darwin'",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "pytest-qt"]
+
+[tool.setuptools.packages.find]
+include = ["voicecmd*"]
+
+[tool.setuptools.package-data]
+voicecmd = ["default_config.yaml", "ui/assets/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-m 'not slow'"
+markers = ["slow: test che caricano il modello Whisper vero"]

@@ -1,0 +1,72 @@
+# Configurazione di voicecmd. Modifica il file e salva: viene riletto da solo.
+
+# Lingua parlata (codice Whisper).
+language: it
+
+stt:
+  # Dove gira il modello: auto | cpu | mps (GPU dei Mac Apple Silicon, sperimentale).
+  # auto = GPU sui Mac Apple Silicon, altrimenti CPU; se la GPU non funziona torna alla CPU.
+  device: auto
+  # Modello Whisper (spike T05). auto = turbo su GPU (~1,1 s per 3 s di audio),
+  # small su CPU (~1,2 s). turbo su CPU è più preciso ma impiega ~5 s.
+  model: auto
+  # Precisione di calcolo. auto = float16 su GPU, int8 su CPU.
+  compute_type: auto
+
+# Trigger: per ciascuno indica ESATTAMENTE uno tra `hotkey` e `mouse_button`.
+# Valori provvisori, da fissare con lo spike T04.
+triggers:
+  # Tieni premuto, parla, rilascia: esegue il comando più simile.
+  command:
+    hotkey: "<ctrl>+<alt>+space"   # formato pynput
+  # Tieni premuto, detta, rilascia: incolla il testo nel campo attivo.
+  dictation:
+    mouse_button: x2               # middle, x1 oppure x2
+
+matching:
+  threshold: 80   # punteggio minimo (0-100) per accettare un comando
+  margin: 5       # distacco minimo dal secondo comando migliore
+
+feedback:
+  tray: true
+  sounds: true
+  overlay: true
+  notifications: true
+
+audio:
+  silence_rms: 0.005        # sotto questa soglia l'audio è considerato silenzio
+  # true: microfono sempre aperto (pallino arancione di macOS acceso), l'audio resta solo
+  # in memoria e non si perde l'inizio della frase. false: si apre al trigger, ma i primi
+  # 100-500 ms vanno persi (spike T06).
+  keep_stream_open: true
+  preroll_ms: 300           # audio prima del trigger incluso nella registrazione (solo con keep_stream_open)
+
+# Comandi. `action.type` può essere:
+#   open  -> apre un URL, un file o un'app (`target`)
+#   shell -> esegue un comando: `command` unico, oppure `mac` / `windows`; `timeout` in secondi
+commands:
+  - name: Apri browser
+    phrases: ["apri il browser", "apri chrome"]
+    action:
+      type: open
+      target: "https://www.google.com"
+
+  - name: Apri GitHub
+    phrases: ["apri github"]
+    action:
+      type: open
+      target: "https://github.com"
+
+  - name: Blocca schermo
+    phrases: ["blocca lo schermo"]
+    action:
+      type: shell
+      mac: "pmset displaysleepnow"
+      windows: "rundll32.exe user32.dll,LockWorkStation"
+
+  - name: Data di oggi
+    phrases: ["che giorno è oggi"]
+    action:
+      type: shell
+      command: "echo oggi"
+      timeout: 10
