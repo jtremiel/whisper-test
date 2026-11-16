@@ -211,7 +211,9 @@ def test_startup_builds_and_starts_triggers(qtbot, tmp_path):
     assert env.hk.mapping == {Mode.COMMAND: "<ctrl>+<alt>+space"}
     assert env.mouse.mapping == {Mode.DICTATION: "x2"}
     assert env.hk.on_event is not None and env.mouse.on_event is not None
-    assert env.keys_released == env.hk.keys_released
+    assert env.keys_released() is True  # delega al trigger da tastiera in uso
+    env.hk.keys_released = lambda: False
+    assert env.keys_released() is False
     assert env.tray.states[-1] is AppState.IDLE
     app.shutdown()
 

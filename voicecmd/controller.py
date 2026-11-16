@@ -16,6 +16,7 @@ from voicecmd.events import (
     MAX_COMMAND_S,
     MAX_DICTATION_S,
     MIN_PRESS_S,
+    SAMPLE_RATE,
     ActionResult,
     Action,
     AppState,
@@ -35,6 +36,28 @@ PasteFn = Callable[[str], ActionResult]
 SubmitFn = Callable[[Callable[[], None]], Any]
 
 MAX_DURATION_S = {Mode.COMMAND: MAX_COMMAND_S, Mode.DICTATION: MAX_DICTATION_S}
+MODE_LABEL = {Mode.COMMAND: "comando", Mode.DICTATION: "dettatura"}
+
+
+def cycle_summary(mode: Mode, info: Mapping[str, Any], outcome: Outcome) -> str:
+    """Una riga per ciclo: modalità, durata audio, tempo di trascrizione, testo, comando, esito."""
+    parts = [f"Ciclo {MODE_LABEL[mode]}"]
+    audio_s = info.get("audio_s")
+    parts.append(f"audio {audio_s:.2f} s" if audio_s is not None else "audio -")
+    stt_s = info.get("stt_s")
+    parts.append(f"trascrizione {stt_s:.2f} s" if stt_s is not None else "trascrizione -")
+    parts.append(f"testo {info['text']!r}" if "text" in info else "testo -")
+    if mode is Mode.COMMAND:
+        if info.get("command"):
+            parts.append(f"comando {info['command']} ({info['score']:.0f}/100)")
+        elif info.get("closest"):
+            parts.append(f"comando nessuno (più vicino {info['closest']} {info['closest_score']:.0f}/100)")
+        else:
+            parts.append("comando nessuno")
+    result = "ok" if outcome.ok else "errore"
+    detail = f" - {outcome.detail}" if outcome.detail else ""
+    parts.append(f"esito {result}: {outcome.title}{detail}")
+    return ", ".join(parts)
 
 
 class Timer(Protocol):
@@ -77,6 +100,7 @@ class Controller:
         submit: SubmitFn | None = None,
         timer_factory: TimerFactory = _thread_timer,
         use_hotwords: bool = False,
+        perf_clock: Callable[[], float] = time.perf_counter,
     ) -> None:
         # use_hotwords: spento di default. Lo spike T05 ha visto hotwords peggiorare il testo
         # ("voce" -> "vola"); il PRD RF3 li prevede, quindi l'opzione resta da rivalutare in T24.
@@ -88,6 +112,7 @@ class Controller:
         self._feedback = feedback
         self._paste = paste
         self._clock = clock
+        self._perf_clock = perf_clock  # solo per misurare la trascrizione nel log
         self._timer_factory = timer_factory
         self._use_hotwords = use_hotwords
         self._executor: ThreadPoolExecutor | None = None
@@ -199,21 +224,31 @@ class Controller:
     # --- elaborazione (worker thread) -------------------------------------
 
     def _process(self, mode: Mode, config: Config) -> None:
+        info: dict[str, Any] = {}
         try:
-            outcome = self._run_cycle(mode, config)
+            outcome = self._run_cycle(mode, config, info)
         except Exception as e:  # noqa: BLE001
             log.exception("Errore durante l'elaborazione")
-            outcome = Outcome(mode, False, "", "Errore", f"{type(e).__name__}: {e}")
+            outcome = Outcome(mode, False, info.get("text", ""), "Errore", f"{type(e).__name__}: {e}")
+        try:
+            log.info("%s", cycle_summary(mode, info, outcome))
+        except Exception:  # noqa: BLE001 - il log non deve fermare il ciclo
+            log.exception("Riepilogo del ciclo non scritto")
         self._finish(outcome)
 
-    def _run_cycle(self, mode: Mode, config: Config) -> Outcome:
+    def _run_cycle(self, mode: Mode, config: Config, info: dict[str, Any]) -> Outcome:
         audio = self._recorder.stop()
         if audio is None or len(audio) == 0:
+            info["audio_s"] = 0.0
             return Outcome(mode, False, "", "Non ho sentito niente", "")
+        info["audio_s"] = len(audio) / SAMPLE_RATE
         hotwords = None
         if mode is Mode.COMMAND and self._use_hotwords:
             hotwords = hotwords_for(config) or None
+        t0 = self._perf_clock()
         text = self._transcriber.transcribe(audio, hotwords=hotwords).strip()
+        info["stt_s"] = self._perf_clock() - t0
+        info["text"] = text
         if not text:
             return Outcome(mode, False, "", "Non ho sentito niente", "")
         if mode is Mode.DICTATION:
@@ -221,6 +256,8 @@ class Controller:
             title = "Testo incollato" if res.ok else "Dettatura non riuscita"
             return Outcome(mode, res.ok, text, title, res.message)
         m = match(text, config.commands, config.matching.threshold, config.matching.margin)
+        info.update(command=m.command.name if m.command else None, score=m.score,
+                    closest=m.closest, closest_score=m.closest_score)
         if m.command is None:
             detail = (
                 f"Il più vicino: {m.closest} ({m.closest_score:.0f}/100)"

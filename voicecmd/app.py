@@ -15,17 +15,37 @@ from functools import partial
 from pathlib import Path
 from typing import Any, Callable
 
-from PySide6.QtCore import QObject, Qt, QTimer, Signal, Slot
+from PySide6.QtCore import QFileSystemWatcher, QObject, Qt, QTimer, Signal, Slot
+from PySide6.QtGui import QAction
 from PySide6.QtWidgets import QApplication
 
 from voicecmd.config import ConfigError, ensure_config, load_config, open_in_editor
 from voicecmd.controller import Controller
 from voicecmd.events import AppState, Mode, Outcome, Recorder, Transcriber, Trigger
+from voicecmd.logging_setup import log_path, setup_logging
 from voicecmd.schema import Config
 
 log = logging.getLogger(__name__)
 
 SOUND_FOR_STATE = {AppState.LISTENING: "start", AppState.DONE: "done", AppState.ERROR: "error"}
+
+# Gli editor salvano con più eventi ravvicinati (troncamento, scrittura, rename): si aspetta
+# che si calmino prima di rileggere il file.
+RELOAD_DEBOUNCE_MS = 300
+
+
+def restart_required(old: Config, new: Config) -> list[str]:
+    """Sezioni che valgono solo dopo il riavvio: modello, lingua e microfono si creano all'avvio."""
+    changed = []
+    if old.language != new.language:
+        changed.append("language")
+    for name in type(old.stt).model_fields:
+        if getattr(old.stt, name) != getattr(new.stt, name):
+            changed.append(f"stt.{name}")
+    for name in type(old.audio).model_fields:
+        if getattr(old.audio, name) != getattr(new.audio, name):
+            changed.append(f"audio.{name}")
+    return changed
 
 
 # --- ponte Feedback -> Qt ----------------------------------------------------
@@ -136,9 +156,12 @@ class VoiceCmdApp(QObject):
         config_path: Path | None = None,
         factories: Factories | None = None,
         background_load: bool = True,
+        reload_debounce_ms: int = RELOAD_DEBOUNCE_MS,
+        log_file: Path | None = None,
     ) -> None:
         super().__init__()
         self.f = factories or Factories()
+        self.log_file = log_file if log_file is not None else log_path()
         self.config_path = ensure_config(config_path)
         self.config, startup_error = self._load_initial_config()
 
@@ -149,6 +172,7 @@ class VoiceCmdApp(QObject):
         self.tray.open_config_requested.connect(self.open_config)
         self.tray.reload_config_requested.connect(self.reload_config)
         self.tray.quit_requested.connect(self.quit)
+        self.open_log_action = self._add_open_log_action()
         self._loaded.connect(self._on_loaded, Qt.ConnectionType.QueuedConnection)
 
         self.controller: Controller | None = None
@@ -156,7 +180,21 @@ class VoiceCmdApp(QObject):
         self.triggers: list[Trigger] = []
         self._loader: threading.Thread | None = None
         self._quitting = False
+        self._hotkey: Trigger | None = None
+        self._triggers_dirty = False  # binding cambiati durante un ciclo: riavvio al ritorno in IDLE
         self._apply_feedback_switches()
+
+        # Osservazione del file: si guarda anche la cartella, perché molti editor salvano
+        # scrivendo un file nuovo e rinominandolo, e il watcher perde il percorso originale.
+        self._last_text = self._read_text()
+        self._reload_timer = QTimer(self)
+        self._reload_timer.setSingleShot(True)
+        self._reload_timer.setInterval(reload_debounce_ms)
+        self._reload_timer.timeout.connect(self._on_file_settled)
+        self.watcher = QFileSystemWatcher(self)
+        self.watcher.fileChanged.connect(self._on_file_event)
+        self.watcher.directoryChanged.connect(self._on_file_event)
+        self._watch()
 
         self.tray.show()
         self.tray.set_status_text("Caricamento del modello…")
@@ -213,37 +251,62 @@ class VoiceCmdApp(QObject):
             self._notify("Impossibile avviare voicecmd", f"{type(result).__name__}: {result}", True)
             return
         transcriber, self.recorder = result
+        self.controller = Controller(
+            self.config, self.recorder, transcriber, self.f.actions(), self.bridge,
+            self.f.paste(self._keys_released), **self.f.controller_kwargs,
+        )
+        self.tray.set_state(AppState.IDLE, None)
+        self._start_triggers()
+
+    def _keys_released(self) -> bool:
+        """Per l'incolla: delega al trigger da tastiera in uso, che cambia se si ricarica."""
+        hk = self._hotkey
+        fn = getattr(hk, "keys_released", None)
+        return True if fn is None else bool(fn())
+
+    def _start_triggers(self) -> None:
+        """Crea e avvia i trigger della config in uso. Va chiamata sul main thread."""
+        assert self.controller is not None
         hotkeys, buttons = trigger_maps(self.config)
-        keys_released = None
-        triggers: list[Trigger] = []
+        built: list[Trigger] = []
         errors: list[str] = []
+        hotkey = None
         if hotkeys:
             try:
-                hk = self.f.hotkey_trigger(hotkeys)
-                triggers.append(hk)
-                keys_released = getattr(hk, "keys_released", None)
+                hotkey = self.f.hotkey_trigger(hotkeys)
+                built.append(hotkey)
             except Exception as e:  # noqa: BLE001 - HotkeyError
                 errors.append(f"Hotkey: {e}")
         if buttons:
             try:
-                triggers.append(self.f.mouse_trigger(buttons))
+                built.append(self.f.mouse_trigger(buttons))
             except Exception as e:  # noqa: BLE001
                 errors.append(f"Mouse: {e}")
-        self.controller = Controller(
-            self.config, self.recorder, transcriber, self.f.actions(), self.bridge,
-            self.f.paste(keys_released), **self.f.controller_kwargs,
-        )
-        for t in triggers:
+        for t in built:
             try:
                 t.start(self.controller.on_trigger)
                 self.triggers.append(t)
             except Exception as e:  # noqa: BLE001 - es. permessi mancanti per l'event tap
                 log.exception("Avvio del trigger non riuscito")
                 errors.append(str(e))
-        self.tray.set_state(AppState.IDLE, None)
+        self._hotkey = hotkey if hotkey in self.triggers else None
         if errors:
             self._notify("Trigger non attivi", "\n".join(errors), True)
         log.info("voicecmd pronto (%d trigger attivi)", len(self.triggers))
+
+    def _stop_triggers(self) -> None:
+        for t in self.triggers:
+            try:
+                t.stop()
+            except Exception:  # noqa: BLE001
+                log.exception("Errore nel fermare un trigger")
+        self.triggers.clear()
+        self._hotkey = None
+
+    def _restart_triggers(self) -> None:
+        self._triggers_dirty = False
+        self._stop_triggers()
+        self._start_triggers()
 
     # --- feedback sul main thread -------------------------------------------
 
@@ -255,6 +318,9 @@ class VoiceCmdApp(QObject):
     @Slot(object, object)
     def _on_state(self, state: AppState, mode: Mode | None) -> None:
         fb = self.config.feedback
+        if state is AppState.IDLE and self._triggers_dirty and not self._quitting:
+            # Riavvio rimandato: fermare un listener mentre il pulsante è premuto perderebbe il rilascio.
+            self._restart_triggers()
         if fb.tray:
             self.tray.set_state(state, mode)
         if fb.overlay:
@@ -296,19 +362,96 @@ class VoiceCmdApp(QObject):
             log.exception("Impossibile aprire la configurazione")
             self._notify("Impossibile aprire la configurazione", str(e), True)
 
+    def _add_open_log_action(self) -> QAction | None:
+        """Aggiunge "Apri log" al menu del tray, subito dopo "Ricarica configurazione"."""
+        menu = getattr(self.tray, "menu", None)
+        if menu is None:
+            return None
+        action = QAction("Apri log", menu)
+        action.triggered.connect(self.open_log)
+        reload_action = getattr(self.tray, "reload_config_action", None)
+        actions = menu.actions()
+        if reload_action in actions and actions.index(reload_action) + 1 < len(actions):
+            menu.insertAction(actions[actions.index(reload_action) + 1], action)
+        else:
+            menu.addAction(action)
+        return action
+
+    @Slot()
+    def open_log(self) -> None:
+        if not self.log_file.exists():
+            self._notify("Log non disponibile", f"Il file {self.log_file} non esiste ancora.", True)
+            return
+        try:
+            open_in_editor(self.log_file)  # su macOS si apre in Console
+        except Exception as e:  # noqa: BLE001
+            log.exception("Impossibile aprire il log")
+            self._notify("Impossibile aprire il log", str(e), True)
+
     @Slot()
     def reload_config(self) -> None:
-        """Rilegge il file; se non è valido mantiene la configurazione in uso. Esteso in T22."""
+        """Voce di menu "Ricarica": rilegge il file anche se non è cambiato."""
+        self._last_text = self._read_text()
+        self._apply_file()
+
+    def _apply_file(self) -> bool:
+        """Applica il file se valido; altrimenti notifica e mantiene la configurazione in uso."""
         try:
             new = load_config(self.config_path)
         except ConfigError as e:
-            self._notify("Configurazione non valida", str(e), True)
-            return
-        self.config = new
+            log.error("%s", e)
+            self._notify("Configurazione non valida", f"{e}\n\nResta in uso la configurazione precedente.", True)
+            return False
+        old, self.config = self.config, new
         self._apply_feedback_switches()
         if self.controller is not None:
             self.controller.reload(new)
-        self._notify("Configurazione ricaricata", str(self.config_path))
+            if trigger_maps(old) != trigger_maps(new):
+                if self.controller.state is AppState.IDLE:
+                    self._restart_triggers()
+                else:
+                    self._triggers_dirty = True
+        text = "Le modifiche sono attive."
+        later = restart_required(old, new)
+        if later:
+            text = f"Riavvia voicecmd per applicare: {', '.join(later)}."
+        log.info("Configurazione ricaricata (%s)", text)
+        self._notify("Configurazione ricaricata", text, bool(later))
+        return True
+
+    # --- osservazione del file -------------------------------------------------
+
+    def _read_text(self) -> str | None:
+        try:
+            return self.config_path.read_text(encoding="utf-8")
+        except OSError:
+            return None
+
+    def _watch(self) -> None:
+        """(Ri)aggancia file e cartella: dopo un rename il file nuovo non è più osservato."""
+        files = set(self.watcher.files())
+        dirs = set(self.watcher.directories())
+        if str(self.config_path) not in files and self.config_path.exists():
+            self.watcher.addPath(str(self.config_path))
+        parent = self.config_path.parent
+        if str(parent) not in dirs and parent.is_dir():
+            self.watcher.addPath(str(parent))
+
+    @Slot(str)
+    def _on_file_event(self, _path: str) -> None:
+        if not self._quitting:
+            self._reload_timer.start()  # riparte a ogni evento: anti-rimbalzo
+
+    @Slot()
+    def _on_file_settled(self) -> None:
+        self._watch()
+        text = self._read_text()
+        # File assente (salvataggio a metà) o contenuto identico (altri file della cartella,
+        # salvataggio senza modifiche): niente da fare.
+        if text is None or text == self._last_text:
+            return
+        self._last_text = text
+        self._apply_file()
 
     @Slot()
     def quit(self) -> None:
@@ -322,12 +465,11 @@ class VoiceCmdApp(QObject):
         if self._quitting:
             return
         self._quitting = True
-        for t in self.triggers:
-            try:
-                t.stop()
-            except Exception:  # noqa: BLE001
-                log.exception("Errore nel fermare un trigger")
-        self.triggers.clear()
+        self._reload_timer.stop()
+        paths = self.watcher.files() + self.watcher.directories()
+        if paths:
+            self.watcher.removePaths(paths)
+        self._stop_triggers()
         if self.controller is not None:
             self.controller.shutdown(wait=True)
         self._close_recorder(self.recorder)
@@ -359,12 +501,13 @@ def _install_sigint(qapp: QApplication) -> QTimer:
 
 
 def main(argv: list[str] | None = None) -> int:
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    log_file = setup_logging()
+    log.info("Log su %s", log_file)
     qapp = QApplication.instance() or QApplication(argv if argv is not None else sys.argv)
     qapp.setQuitOnLastWindowClosed(False)
     qapp.setApplicationName("voicecmd")
     _sigint_timer = _install_sigint(qapp)  # noqa: F841 - va tenuto vivo
-    app = VoiceCmdApp()
+    app = VoiceCmdApp(log_file=log_file)
     try:
         return qapp.exec()
     finally:
