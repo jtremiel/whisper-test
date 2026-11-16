@@ -234,18 +234,21 @@ Tredici moduli indipendenti. Ciascuno rispetta i Protocol di `events.py`, tocca 
   - **Dipende da**: T23
   - **Cosa**: checklist che ripercorre i criteri di accettazione del PRD §7 più: concessione dei tre permessi da zero; pulsante del mouse come trigger; l'overlay non toglie il focus (scrivere in un editor mentre compare); dettatura con accenti; clipboard ripristinata; latenza percepita. L'utente la esegue e segna l'esito di ogni voce.
   - **Fatto quando**: l'utente ha compilato la checklist. Ogni voce fallita diventa un nuovo task in fondo a questa ondata.
+  - Preparazione: creata `docs/checklists/macos.md` (2026-11-16): permessi da zero con `tccutil reset`, avvio/uscita e assenza di rete, criteri PRD §7 (C1-C6), trigger (soppressione del pulsante, Ctrl+Option+Spazio, pressione breve, tetto 30 s, scambio a caldo), overlay e focus (anche schermo intero e Spaces), dettatura (barra di Chrome, accenti, clipboard, rilascio lento), feedback, latenza e riconoscimento con la voce dell'utente (compreso "apri github" da T24), robustezza. In attesa di compilazione.
 
 - [ ] **T26 [P] [U] Verifica manuale su Windows**
   - **File**: `docs/checklists/windows.md`
   - **Dipende da**: T23
   - **Cosa**: istruzioni di installazione su Windows (Python, venv, `pip install -e .`), poi la stessa checklist di T25 più i punti lasciati "da verificare" in T04 e T15 (pulsanti `x1`/`x2`, soppressione), `os.startfile`, i comandi shell `windows:`, e la latenza con il modello di default su quella macchina.
   - **Fatto quando**: l'utente ha compilato la checklist su una macchina Windows reale. Ogni voce fallita diventa un nuovo task.
+  - Preparazione: creata `docs/checklists/windows.md` (2026-11-16): installazione (Python 3.12/3.13, il ramo `applicazione` va prima pubblicato su GitHub, venv, `pip install -e ".[dev]"`, test, percorsi di config e log), poi le voci di macOS adattate più pulsanti `x1`/`x2`/`middle` e soppressione, Ctrl+Alt+Spazio con layout italiano/AltGr, `os.startfile` (nome di programma, `%VAR%`, file, percorso inesistente), varianti `windows:` e timeout con `taskkill`, app elevate (limite atteso), latenza di `small` su CPU con ripiego su `base`. In attesa di una macchina Windows.
 
 - [ ] **T27 [P] Guida utente**
   - **File**: `docs/GUIDA.md`
   - **Dipende da**: T23
   - **Cosa**: installazione su Mac e Windows, permessi macOS passo per passo, avvio, dove sta il file di configurazione, riferimento completo dello YAML con esempi per ogni tipo di azione, come scegliere frasi che si riconoscono bene, risoluzione dei problemi (trigger che non scatta, comando non riconosciuto, lentezza), dove sta il log. `README.md` non va modificato.
   - **Fatto quando**: ogni campo di `schema.py` è documentato e ogni comando citato nella guida è stato eseguito almeno una volta.
+  - Preparazione: creata `docs/GUIDA.md` (2026-11-16): installazione Mac/Windows, avvio e primo download del modello, permessi macOS passo per passo (vanno al terminale, non a Python), uso dei trigger e stati, percorsi di configurazione e log, ricarica (cosa vale subito e cosa richiede il riavvio), riferimento di **tutti** i campi di `schema.py` (`language`; `stt` device/model/compute_type/vad_filter/hotwords; `triggers` con il formato completo di `hotkey`; `matching`; `feedback`; `audio`; `commands` con `open` e `shell`), frasi che si riconoscono bene, risoluzione dei problemi (compresa la scorciatoia di sistema Ctrl+Option+Spazio da T04 e il tasto gesture dei Logitech MX), privacy. Verificato qui: tutti i nomi di tasto e le hotkey d'esempio passano `parse_hotkey`; tutti i blocchi YAML passano lo schema; i messaggi d'errore citati sono quelli reali di `load_config`; installazione da zero in un clone pulito (`python3.14 -m venv`, `pip install -e ".[dev]"`, `pytest -q` → 341 verdi); `config_path()` stampato; `brew list python@3.14`; app citate presenti. **Da eseguire** (per questo il task resta aperto): `git clone` da GitHub (il ramo non è ancora pubblicato; provato con un clone locale), `tail -f` sul log (il file nasce al primo avvio dopo T23), `pmset displaysleepnow` (spegne lo schermo: voce L3 di T25), tutti i comandi Windows (checklist T26).
 
 ---
 

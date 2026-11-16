@@ -8,6 +8,5 @@ __pycache__/
 !testVoice.mp3
 *.m4a
 models/*.bin
-23355652+jtremiel@users.noreply.github.md
 *.egg-info/
 .pytest_cache/
