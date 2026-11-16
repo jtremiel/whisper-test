@@ -141,3 +141,7 @@ def test_stt_device_rejects_unknown():
 
 def test_stt_vad_filter_default_on():
     assert Config().stt.vad_filter is True
+
+
+def test_stt_hotwords_default_on():
+    assert Config().stt.hotwords is True

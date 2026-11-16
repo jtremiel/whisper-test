@@ -22,6 +22,10 @@ class SttConfig(_Strict):
     # Filtro voce (VAD) di faster-whisper. Acceso: con turbo no_speech_prob vale 0 anche sul
     # silenzio e il rumore produce frasi inventate ("Grazie a tutti."). Costo ~0,04 s.
     vad_filter: bool = True
+    # Parole delle frasi dei comandi suggerite a Whisper, solo in modalità comando (T24: nessun
+    # comando sbagliato, riconoscimenti 23→24/30 su turbo e 24→29/30 su small). In dettatura
+    # restano spente: tolgono punteggiatura e maiuscole.
+    hotwords: bool = True
 
 
 class TriggerConfig(_Strict):

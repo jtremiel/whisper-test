@@ -168,3 +168,9 @@ def test_restart_required_fields():
     new = Config.model_validate({"stt": {"device": "cpu", "compute_type": "int8"},
                                  "audio": {"preroll_ms": 100}, "matching": {"threshold": 50}})
     assert restart_required(base, new) == ["stt.device", "stt.compute_type", "audio.preroll_ms"]
+
+
+def test_hotwords_change_needs_no_restart():
+    base = Config()
+    new = Config.model_validate({"stt": {"hotwords": False}})
+    assert restart_required(base, new) == []

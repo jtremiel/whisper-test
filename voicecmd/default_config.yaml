@@ -15,6 +15,9 @@ stt:
   # Filtro voce: scarta il rumore di fondo prima della trascrizione. Senza, turbo può
   # inventare frasi come "Grazie a tutti." quando non parli. Costa circa 0,04 s.
   vad_filter: true
+  # Suggerisce a Whisper le parole delle frasi dei comandi (solo per i comandi, non per la
+  # dettatura): separa meglio parole come "apri chrome" invece di "apricrom".
+  hotwords: true
 
 # Trigger: per ciascuno indica ESATTAMENTE uno tra `hotkey` e `mouse_button`.
 # Valori provvisori, da fissare con lo spike T04.

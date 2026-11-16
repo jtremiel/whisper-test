@@ -29,6 +29,7 @@ Non riaprirle. Se una si rivela impraticabile, fermati, scrivi il motivo nella n
 | **rapidfuzz** per il matching | Locale, veloce, tollera gli errori di trascrizione. |
 | **Incolla via clipboard** per la dettatura | Digitare carattere per carattere sbaglia accenti e layout di tastiera. |
 | **pydantic + PyYAML** per la configurazione | Errori di validazione leggibili da mostrare all'utente. |
+| **Hotwords accese in modalità comando** (`stt.hotwords: true`), spente in dettatura | Test T24 su 30 prove: nessun comando sbagliato, riconoscimenti da 23 a 24 su turbo/MPS e da 24 a 29 su small/CPU. In dettatura tolgono punteggiatura e maiuscole. Decisione dell'utente dopo T24. |
 | **Push-to-talk**, lingua italiana, shell senza conferma | Scelte dell'utente, vedi PRD §2. |
 
 ## 4. Architettura

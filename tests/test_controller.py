@@ -356,8 +356,18 @@ def test_reload_during_cycle_applied_at_idle():
     assert len(h.open.specs) == 1
 
 
-def test_hotwords_off_by_default():
-    h = Harness()
+def test_hotwords_follow_config():
+    h = Harness(transcriber=FakeTranscriber("apri safari"))  # stt.hotwords: true di default
+    h.press_release()
+    assert h.transcriber.calls[-1] == ["apri", "safari", "elenca", "i", "file"]
+    off = CONFIG.model_copy(update={"stt": CONFIG.stt.model_copy(update={"hotwords": False})})
+    h.c.reload(off)
+    h.press_release()
+    assert h.transcriber.calls[-1] is None
+
+
+def test_hotwords_forced_off():
+    h = Harness(use_hotwords=False)
     h.press_release()
     assert h.transcriber.calls == [None]
 

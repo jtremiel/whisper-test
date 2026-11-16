@@ -40,6 +40,8 @@ def restart_required(old: Config, new: Config) -> list[str]:
     if old.language != new.language:
         changed.append("language")
     for name in type(old.stt).model_fields:
+        if name == "hotwords":  # letto dal Controller a ogni ciclo
+            continue
         if getattr(old.stt, name) != getattr(new.stt, name):
             changed.append(f"stt.{name}")
     for name in type(old.audio).model_fields:

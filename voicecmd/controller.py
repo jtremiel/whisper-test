@@ -99,11 +99,11 @@ class Controller:
         clock: Callable[[], float] = time.monotonic,
         submit: SubmitFn | None = None,
         timer_factory: TimerFactory = _thread_timer,
-        use_hotwords: bool = False,
+        use_hotwords: bool | None = None,
         perf_clock: Callable[[], float] = time.perf_counter,
     ) -> None:
-        # use_hotwords: spento di default. Lo spike T05 ha visto hotwords peggiorare il testo
-        # ("voce" -> "vola"); il PRD RF3 li prevede, quindi l'opzione resta da rivalutare in T24.
+        # use_hotwords: None = segue `stt.hotwords` della config in uso (cambiabile a caldo);
+        # True/False lo forza (test). Solo in modalità comando: vedi `SttConfig.hotwords`.
         self._config = config
         self._pending_config: Config | None = None
         self._recorder = recorder
@@ -243,7 +243,8 @@ class Controller:
             return Outcome(mode, False, "", "Non ho sentito niente", "")
         info["audio_s"] = len(audio) / SAMPLE_RATE
         hotwords = None
-        if mode is Mode.COMMAND and self._use_hotwords:
+        use = config.stt.hotwords if self._use_hotwords is None else self._use_hotwords
+        if mode is Mode.COMMAND and use:
             hotwords = hotwords_for(config) or None
         t0 = self._perf_clock()
         text = self._transcriber.transcribe(audio, hotwords=hotwords).strip()
