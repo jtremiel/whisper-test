@@ -49,7 +49,13 @@ def _default_factory(model: str, device: str, compute_type: str) -> Any:
     # Import qui: il modulo si importa (e si testa) senza caricare ctranslate2.
     from faster_whisper import WhisperModel
 
-    return WhisperModel(model, device=device, compute_type=compute_type)
+    # Privacy (PRD §4): nessuna connessione se il modello è già in cache. Solo al primo
+    # avvio, quando manca, lo si scarica da Hugging Face.
+    try:
+        return WhisperModel(model, device=device, compute_type=compute_type, local_files_only=True)
+    except Exception:  # noqa: BLE001 - modello non in cache
+        log.info("Modello '%s' non in cache: lo scarico", model)
+        return WhisperModel(model, device=device, compute_type=compute_type)
 
 
 class FasterWhisperTranscriber:

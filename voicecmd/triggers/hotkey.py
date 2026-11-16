@@ -156,6 +156,18 @@ class HotkeyTrigger:
             on_press=self.handle_press, on_release=self.handle_release
         )
         self._listener.start()
+        # Su macOS pynput non fallisce senza permessi: avvisa nel log e poi non riceve nulla.
+        # Si aspetta che il listener sia pronto e si controlla il flag, per non dichiararlo attivo.
+        wait = getattr(self._listener, "wait", None)
+        if callable(wait):
+            wait()
+        if getattr(self._listener, "IS_TRUSTED", True) is False:
+            self.stop()
+            raise RuntimeError(
+                "impossibile ascoltare la tastiera: mancano i permessi 'Monitoraggio input' e "
+                "'Accessibilità' (Impostazioni di Sistema > Privacy e sicurezza) per l'app che "
+                "esegue voicecmd"
+            )
 
     def stop(self) -> None:
         """Ferma il listener e azzera lo stato dei tasti."""

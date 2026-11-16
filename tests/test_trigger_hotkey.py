@@ -239,3 +239,34 @@ def test_same_hotkey_for_two_modes_rejected():
 
 def test_hotkey_error_is_value_error():
     assert issubclass(HotkeyError, ValueError)
+
+
+def test_untrusted_listener_raises_and_stops():
+    created = {}
+
+    class Untrusted(FakeListener):
+        IS_TRUSTED = False
+
+        def wait(self):
+            self.waited = True
+
+    def factory(**kw):
+        created["l"] = Untrusted(**kw)
+        return created["l"]
+
+    trig = HotkeyTrigger(DEFAULT, listener_factory=factory)
+    with pytest.raises(RuntimeError, match="Monitoraggio input"):
+        trig.start(lambda m, p: None)
+    assert created["l"].waited and created["l"].stopped
+
+
+def test_trusted_listener_starts():
+    class Trusted(FakeListener):
+        IS_TRUSTED = True
+
+        def wait(self):
+            pass
+
+    trig = HotkeyTrigger(DEFAULT, listener_factory=Trusted)
+    trig.start(lambda m, p: None)
+    trig.stop()
